@@ -53,7 +53,12 @@ object MovieLensALS {
     }.collect().toMap
 
     // your code here
-
+    val numRatings = ratings.count 
+    val numUsers = ratings.map(_._2.user).distinct.count
+    val numMovies = ratings.map(_._2.product).distinct.count
+    
+    println("\nGot " + numRatings + " ratings from " + numUsers + " users on " + numMovies + " movies.")
+    
     // clean up
     sc.stop()
   }
@@ -72,7 +77,8 @@ object MovieLensALS {
     val lines = Source.fromFile(path).getLines()
     val ratings = lines.map { line =>
       val fields = line.split("::")
-      Rating(fields(0).toInt, fields(1).toInt, fields(2).toDouble)
+      // Rating --> An ALS case class (Alternating Least Squares algorithm)
+      Rating(fields(0).toInt, fields(1).toInt, fields(2).toDouble) 
     }.filter(_.rating > 0.0)
     if (ratings.isEmpty) {
       sys.error("No ratings provided.")

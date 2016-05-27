@@ -5,3 +5,8 @@
 usb/**
 **~
 website/css/main.css
+target/
+derby.log
+personalRatings.txt
+cache/
+metastore_db/
