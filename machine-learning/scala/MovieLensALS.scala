@@ -15,7 +15,7 @@ object MovieLensALS {
 
   def main(args: Array[String]) {
 
-    Logger.getLogger("org.apache.spark").setLevel(Level.WARN)
+    Logger.getLogger("org.apache.spark").setLevel(Level.ERROR)
     Logger.getLogger("org.eclipse.jetty.server").setLevel(Level.OFF)
 
     if (args.length != 2) {
@@ -25,19 +25,16 @@ object MovieLensALS {
     }
 
     // set up environment
-
     val conf = new SparkConf()
       .setAppName("MovieLensALS")
       .set("spark.executor.memory", "2g")
     val sc = new SparkContext(conf)
 
     // load personal ratings
-
     val myRatings = loadRatings(args(1))
     val myRatingsRDD = sc.parallelize(myRatings, 1)
 
     // load ratings and movie titles
-
     val movieLensHomeDir = args(0)
 
     val ratings = sc.textFile(new File(movieLensHomeDir, "ratings.dat").toString).map { line =>
@@ -78,14 +75,9 @@ object MovieLensALS {
     
     printf("\nTraining: %d, validation: %d, test: %d\n", numTraining, numValidation, numTest)
     
-//    val mfm = ALS.train(training, 8, 20, 10)
-//    val rmse = computeRmse(mfm, validation, numValidation);
-//    
-//    println("\nrmse: " + rmse)
-    
-    val ranks = List(8, 12)
-    val lambdas = List(1.0, 10.0)
-    val numIters = List(10, 20)
+    val ranks = List(20)
+    val lambdas = List(0.01, 0.1, 1)
+    val numIters = List(20)
     var bestModel: Option[MatrixFactorizationModel] = None
     var bestValidationRmse = Double.MaxValue
     var bestRank = 0
@@ -109,8 +101,45 @@ object MovieLensALS {
     
     val testRmse = computeRmse(bestModel.get, test, numTest)
 
-    println("The best model was trained with rank = " + bestRank + " and lambda = " + bestLambda
+    println("\nThe best model was trained with rank = " + bestRank + " and lambda = " + bestLambda
       + ", and numIter = " + bestNumIter + ", and its RMSE on the test set is " + testRmse + ".")
+    
+    // Generating movie recommendations
+    val myRatedMovieIds = myRatings.map(_.product).toSet
+    val candidates = sc.parallelize(movies.keys.filter(!myRatedMovieIds.contains(_)).toSeq)
+    val recommendations = bestModel.get
+      .predict(candidates.map((0, _)))
+      .collect()
+      .sortBy(- _.rating)
+      .take(15)
+    
+    var i = 1
+    println("Movies recommended for you:")
+    recommendations.foreach { r =>
+      println("%2d".format(i) + ": " + movies(r.product) + " | rating: " + r.rating + " | user: " + r.user)
+      i += 1
+    }
+    
+    println("\n")
+    
+    val discouragements = bestModel.get
+      .predict(candidates.map((0, _)))
+      .collect()
+      .sortBy(+ _.rating)
+      .take(15)
+    
+    var j = 1
+    println("Movies not recommended for you:")
+    discouragements.foreach { r =>
+      println("%2d".format(j) + ": " + movies(r.product) + " | rating: " + r.rating + " | user: " + r.user)
+      j += 1
+    }
+
+    val meanRating = training.union(validation).map(_.rating).mean
+    val baselineRmse =
+      math.sqrt(test.map(x => (meanRating - x.rating) * (meanRating - x.rating)).mean)
+    val improvement = (baselineRmse - testRmse) / baselineRmse * 100
+    println("\nThe best model improves the baseline by " + "%1.2f".format(improvement) + "%.")
     
     // clean up
     sc.stop()
