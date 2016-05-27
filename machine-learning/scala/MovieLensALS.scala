@@ -53,11 +53,30 @@ object MovieLensALS {
     }.collect().toMap
 
     // your code here
-    val numRatings = ratings.count 
+    val numRatings = ratings.count
     val numUsers = ratings.map(_._2.user).distinct.count
     val numMovies = ratings.map(_._2.product).distinct.count
     
     println("\nGot " + numRatings + " ratings from " + numUsers + " users on " + numMovies + " movies.")
+    
+    // dividing into subsets based on the last digit of the timestamp
+    val numPartitions = 4
+    val training = ratings.filter(x => x._1 < 6)
+      .values
+      .union(myRatingsRDD) // join with my personal ratings set
+      .repartition(numPartitions) // controls the level of parallelism
+      .cache()
+    val validation = ratings.filter(x => x._1 >= 6 && x._1 < 8)
+      .values
+      .repartition(numPartitions)
+      .cache()
+    val test = ratings.filter(x => x._1 >= 8).values.cache()
+    
+    val numTraining = training.count()
+    val numValidation = validation.count()
+    val numTest = test.count()
+    
+    printf("\nTraining: %d, validation: %d, test: %d\n", numTraining, numValidation, numTest)
     
     // clean up
     sc.stop()
