@@ -78,10 +78,44 @@ object MovieLensALS {
     
     printf("\nTraining: %d, validation: %d, test: %d\n", numTraining, numValidation, numTest)
     
+//    val mfm = ALS.train(training, 8, 20, 10)
+//    val rmse = computeRmse(mfm, validation, numValidation);
+//    
+//    println("\nrmse: " + rmse)
+    
+    val ranks = List(8, 12)
+    val lambdas = List(1.0, 10.0)
+    val numIters = List(10, 20)
+    var bestModel: Option[MatrixFactorizationModel] = None
+    var bestValidationRmse = Double.MaxValue
+    var bestRank = 0
+    var bestLambda = -1.0
+    var bestNumIter = -1
+    
+    for(rank <- ranks; lambda <- lambdas; numIter <- numIters) {
+      val model = ALS.train(training, rank, numIter, lambda)
+      val validationRmse = computeRmse(model, validation, numValidation)
+      println("RMSE (validation) = " + validationRmse + " for the model trained with rank = "
+        + rank + ", lambda = " + lambda + ", and numIter = " + numIter + ".")
+      
+      if(validationRmse < bestValidationRmse) {
+        bestModel = Some(model)
+        bestValidationRmse = validationRmse
+        bestRank = rank
+        bestLambda = lambda
+        bestNumIter = numIter
+      }
+    }
+    
+    val testRmse = computeRmse(bestModel.get, test, numTest)
+
+    println("The best model was trained with rank = " + bestRank + " and lambda = " + bestLambda
+      + ", and numIter = " + bestNumIter + ", and its RMSE on the test set is " + testRmse + ".")
+    
     // clean up
     sc.stop()
   }
-
+  
   /** Compute RMSE (Root Mean Squared Error). */
   def computeRmse(model: MatrixFactorizationModel, data: RDD[Rating], n: Long): Double = {
     val predictions: RDD[Rating] = model.predict(data.map(x => (x.user, x.product)))
